@@ -234,6 +234,7 @@ public int MenuHandler_ConfirmStop(Handle menu, MenuAction action, int client, i
 			CG_RemoveMotd(client);
 			g_bInRadio[client] = false;
 			g_bPause[client] = true;
+			ClearLyric(client);
 			PrintToChat(client, "%s  \x04音乐已停止播放", PREFIX)
 		}
 	}
@@ -323,8 +324,8 @@ public Action Command_AdminStop(int client, int args)
 		KillTimer(timer);
 		RemoveFromArray(array_timer, 0);
 	}
-	
-	LyricHud("");
+
+	LyricHud(">>> 歌曲已停止播放 <<<");
 }
 
 public Action Command_MusicBan(int client, int args)
@@ -469,6 +470,8 @@ public int MenuHandler_DisplayList(Handle menu, MenuAction action, int client, i
 		g_fNextPlay = GetGameTime()+g_Sound[fLength];
 		
 		PrepareSong(GetClientUserId(client), g_Sound[iSongId]);
+		
+		PrintToChat(client, "%s  \x04服务器正在向CDN节点更新缓存,音乐将在数秒后播放..", PREFIX);
 	}
 	else if(action == MenuAction_End)
 	{
@@ -480,7 +483,6 @@ void PrepareSong(int userid, int songid)
 {
 	char url[256];
 	Format(url, 256, "%s%d", CACHED, songid);
-	PrintToServer("cache url: %s", url);
 
 	Handle hRequest = SteamWorks_CreateHTTPRequest(k_EHTTPMethodGET, url);
 	SteamWorks_SetHTTPRequestContextValue(hRequest, userid);
@@ -503,9 +505,10 @@ public int API_CachedSong(const char[] sData, int userid)
 	if(StrEqual(sData, "success!", false) || StrEqual(sData, "file_exists!", false))
 		InitPlayer(GetClientOfUserId(userid));
 	else
+	{
+		g_fNextPlay = 0.0;
 		LogError("Cache song => [%s]", sData);
-
-	g_fNextPlay = 0.0;
+	}
 }
 
 void InitPlayer(int client)
@@ -525,7 +528,7 @@ void InitPlayer(int client)
 		if(IsClientInGame(i))
 			target_list[target_count++] = i;
 	}
-	
+
 	if(g_hPlayMenu != INVALID_HANDLE)
 		CloseHandle(g_hPlayMenu);
 
@@ -548,18 +551,15 @@ void InitPlayer(int client)
 		CG_ShowHiddenMotd(target_list[i], murl);
 	}
 
-	if(client != 0)
-	{
-		int cost = 200;
-		if(FindPluginByFile("zombiereloaded.smx")) cost = 1000;
-		Store_SetClientCredits(client, Store_GetClientCredits(client) - cost, "点歌");
-		PrintToChat(client, "%s \x01点歌成功!花费\x03%d\x10信用点\x01 余额\x03%i\x10信用点", PREFIX, cost, Store_GetClientCredits(client));
-		PrintToChatAll("%s \x04%N\x01点播歌曲[\x0C%s\x01]", PREFIX, client, g_Sound[szName]);
-		LogToFileEx(logFile, "\"%L\" 点播了歌曲[%s]", client, g_Sound[szName]);
-	}
+	int cost = 200;
+	if(FindPluginByFile("zombiereloaded.smx")) cost = 1000;
+	Store_SetClientCredits(client, Store_GetClientCredits(client) - cost, "点歌");
+	PrintToChat(client, "%s \x01点歌成功!花费\x03%d\x10信用点\x01 余额\x03%i\x10信用点", PREFIX, cost, Store_GetClientCredits(client));
+	PrintToChatAll("%s \x04%N\x01点播歌曲[\x0C%s\x01]", PREFIX, client, g_Sound[szName]);
+	LogToFileEx(logFile, "\"%L\" 点播了歌曲[%s]", client, g_Sound[szName]);
 
-	CreateTimer(0.2, Timer_GetLyric, g_Sound[iSongId], TIMER_FLAG_NO_MAPCHANGE);
-	
+	CreateTimer(0.1, Timer_GetLyric, g_Sound[iSongId], TIMER_FLAG_NO_MAPCHANGE);
+
 	g_fNextPlay = GetGameTime()+g_Sound[fLength];
 }
 
@@ -716,5 +716,13 @@ void LyricHud(const char[] message)
 		if(IsClientInGame(client) && !g_bDiable[client] && !g_bPause[client])
 			PushArrayCell(array_client, client);
 	CG_ShowGameText(message, "30.0", "57 197 187", "-1.0", "0.8", array_client);
+	delete array_client;
+}
+
+void ClearLyric(int client)
+{
+	ArrayList array_client = CreateArray();
+	PushArrayCell(array_client, client);
+	CG_ShowGameText(">>> 歌曲已停止播放 <<<", "5.0", "57 197 187", "-1.0", "0.8", array_client);
 	delete array_client;
 }
